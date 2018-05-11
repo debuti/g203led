@@ -2,7 +2,7 @@
 CLI control of your Logitech G203 mouse color led. Heavily inspired by smasty reverse-engineering of the protocol and g9led
 
 ## Requirements
-* libusb-dev
+* libusb-1.0-0-dev
 
 ## Building and running
 ```

@@ -5,9 +5,9 @@
 #include <inttypes.h>
 
 #define G203_VENDOR_ID   0x046d
-#define G203_PRODUCT_ID  0xc31c //0xc084
+#define G203_PRODUCT_ID  0xc084
 
-#define DEBUG 1
+#define DEBUG 0
 #define log_(fmt, ...) if(DEBUG) printf(fmt, ## __VA_ARGS__)
 
 unsigned int get_hex4(unsigned char *p) {
@@ -31,7 +31,7 @@ static void printHelp (const char* program) {
   fprintf(stderr, "\t-b <brightness>\n");
   fprintf(stderr, "\t\tSpecifies a brightness value, from 1 to 99. i.e. 50\n");
   fprintf(stderr, "\t-r <rate>\n");
-  fprintf(stderr, "\t\tSpecifies a effect change rate, in secs, from 1 to 20. i.e. 5\n");
+  fprintf(stderr, "\t\tSpecifies a effect change rate, in secs, from 1 to 20. 1 is faster\n");
   fprintf(stderr, "\t-h\n");
   fprintf(stderr, "\t\tShows this message\n");
   fprintf(stderr, "The mode selected will depend upon the given options. Here is a table\n");
@@ -39,6 +39,7 @@ static void printHelp (const char* program) {
   fprintf(stderr, "\tFixed value\tX\n");
   fprintf(stderr, "\tCarousel\t\tX\tX\n");
   fprintf(stderr, "\tBreathing\tX\tX\tX\n");
+  fprintf(stderr, "Ex. sudo ./g203led -b 99 -r 5 -c AAAAAA\n");
 }
 
 int doGetopt (int argc, char* argv[], unsigned char** color, uint8_t* brightness, uint16_t* rate) {
@@ -84,11 +85,6 @@ int doGetopt (int argc, char* argv[], unsigned char** color, uint8_t* brightness
           return 1;
         }
         log_("rate 0x%04hhx\n", *rate);
-    uint16_t onesec = 0x03e8;
-    uint16_t twentysec = 0x4e20;
-    uint16_t transfRate = ((twentysec-onesec)/20*(*rate))+onesec;
-        log_("transfRate 0x%04hhx\n", transfRate);
-        log_("transfRate %u\n", transfRate);
         break;
       }
       case 'h': {
@@ -186,11 +182,13 @@ int carousel(struct libusb_device_handle *handle, uint8_t brightness, uint16_t r
                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     uint16_t usb_data_len=20;
 
-    
-    usb_data[13] = brightness;
-    usb_data[11] = rate;
-    usb_data[12] = rate;
+    uint16_t onesec = 0x03e8;
+    uint16_t twentysec = 0x4e20;
+    uint16_t transfRate = ((twentysec-onesec)/20*rate)+onesec;
 
+    usb_data[11] = transfRate>>8 & 0xff;
+    usb_data[12] = transfRate & 0xff;
+    usb_data[13] = brightness;
     
    
     return sendusb(handle, (char*)usb_data, usb_data_len);
@@ -206,11 +204,15 @@ int breath(struct libusb_device_handle *handle, unsigned char *color, uint8_t br
                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     uint16_t usb_data_len=20;
 
+    uint16_t onesec = 0x03e8;
+    uint16_t twentysec = 0x4e20;
+    uint16_t transfRate = ((twentysec-onesec)/20*rate)+onesec;
+
     usb_data[6] = get_hex8(color);
     usb_data[7] = get_hex8(color+2);
     usb_data[8] = get_hex8(color+4);
-    usb_data[9] = rate;
-    usb_data[10] = rate;
+    usb_data[9] = transfRate>>8 & 0xff;
+    usb_data[10] = transfRate & 0xff;
     usb_data[12] = brightness;
    
     return sendusb(handle, (char*)usb_data, usb_data_len);
@@ -222,8 +224,8 @@ int main(int argc, char **argv) {
 	int ret;
 
     unsigned char* color = NULL;
-    uint8_t brightness = -1;
-    uint16_t rate = -1;
+    uint8_t brightness = 0;
+    uint16_t rate = 0;
 
     ret = doGetopt (argc, argv, &color, &brightness, &rate);
     if (ret != 0) {
@@ -243,9 +245,9 @@ int main(int argc, char **argv) {
       return -1;
     }
 
-    if (color && brightness!=-1 && rate!=-1) 
+    if (color && brightness && rate) 
       ret = breath(usb_handle, color, brightness, rate);
-    else if (brightness!=-1 && rate!=-1) 
+    else if (brightness && rate) 
       ret = carousel(usb_handle, brightness, rate);
     else if (color) 
       ret = fixedColor(usb_handle, color);
